@@ -30,39 +30,56 @@
  * SUCH DAMAGE.
  */
 
-/* @notes(aabib):
+/*
  *
- * - links: ui/window/event/graphics
- * https://github.com/ColleagueRiley/RGFW
- * https://github.com/floooh/sokol
- * https://github.com/glfw/glfw
- * https://github.com/freeglut/freeglut
- * https://docs.rs/winit/latest/winit/platform/index.html
- * https://github.com/nicbarker/clay
- * https://github.com/rxi/microui/
- * https://github.com/ocornut/imgui
- * https://github.com/david-vanderson/dvui
- * https://www.gpui.rs/
- * https://github.com/emilk/egui
- * https://github.com/raysan5/raylib
- * https://github.com/libsdl-org/SDL
- * https://github.com/gfx-rs/wgpu
- * https://github.com/kvark/blade
+ * @links: ui/window/event/graphics
+ * - https://github.com/ColleagueRiley/RGFW
+ * - https://github.com/floooh/sokol
+ * - https://github.com/glfw/glfw
+ * - https://github.com/freeglut/freeglut
+ * - https://docs.rs/winit/latest/winit/platform/index.html
+ * - https://github.com/nicbarker/clay
+ * - https://github.com/rxi/microui/
+ * - https://github.com/ocornut/imgui
+ * - https://github.com/david-vanderson/dvui
+ * - https://www.gpui.rs/
+ * - https://github.com/emilk/egui
+ * - https://github.com/raysan5/raylib
+ * - https://github.com/libsdl-org/SDL
+ * - https://github.com/gfx-rs/wgpu
+ * - https://github.com/kvark/blade
  *
- * - links: x11
- * https://gitlab.freedesktop.org/xorg/lib/libx11
- * https://www.x.org/releases/current/doc/libX11/libX11/libX11.html
- * https://tronche.com/gui/x/xlib/
- * https://hereket.com/posts/linux_creating_x11_windows/
- * https://www.x.org/wiki/guide/xlib-and-xcb/
- * https://www.x.org/wiki/Development/
- * http://mech.math.msu.su/~vvb/2course/Borisenko/CppProjects/GWindow/xintro.html
- * https://gaultier.github.io/blog/x11_x64.html
- * https://magcius.github.io/xplain/article/index.html
+ * @links: x11
+ * - https://gitlab.freedesktop.org/xorg/lib/libx11
+ * - https://www.x.org/releases/current/doc/libX11/libX11/libX11.html
+ * - https://tronche.com/gui/x/xlib/
+ * - https://hereket.com/posts/linux_creating_x11_windows/
+ * - https://www.x.org/wiki/guide/xlib-and-xcb/
+ * - https://www.x.org/wiki/Development/
+ * - http://mech.math.msu.su/~vvb/2course/Borisenko/CppProjects/GWindow/xintro.html
+ * - https://gaultier.github.io/blog/x11_x64.html
+ * - https://magcius.github.io/xplain/article/index.html
  *
- * - links: win32
+ * @links: wayland
+ * - https://amini-allight.org/post/using-wayland-with-vulkan
+ *
+ * @links: win32
+ *
+ * @links: opengl
+ *
+ * @links: vulkan
+ * - https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html
+ *
+ *  @links: directx
  *
  */
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <unistd.h>
 
 // ----------------------------------------------------------------------------
 //
@@ -182,6 +199,7 @@
 
 // @brief(aabib): on linux if opengl(gapi) and x11(wapi) is selected , defaults to glx
 # if defined(NILE_PLATFORM_LINUX) && defined(NILE_WINDOW_X11)
+#  define NILE_WINDOW_X11_GLX
 #  define GLAD_GLX_IMPLEMENTATION // Enables Glad GLX
 #  include "../../vendor-glad/v2.0.8/glx14.h"
 # endif
@@ -201,6 +219,7 @@
 // Nile GRFX: OpenGL ES
 //
 #if defined(NILE_PLATFORM_LINUX) && defined(NILE_WINDOW_WAYLAND)
+# define NILE_WINDOW_X11_EGL
 # define GLAD_EGL_IMPLEMENTATION             // Enables Glad GLX
 # include "../../vendor-glad/v2.0.8/egl15.h" // Glad GLX Headers/Utils/Loaders
 #endif
@@ -338,14 +357,45 @@ clamp(float min, float value, float max)
 // ----------------------------------------------------------------------------
 // Linux main
 //
+// Window: X11 , Wayland
+// GRFX: opengl , opengl es , vulkan , wgpu
+// Window Glue: Glx , Egl
+// Input:
+// Audio: Jack, Pulse , Pipewire
+//
+
+// @brief(aabib): intended to be used with opengl v[1.0,1.1]
+fn_internal int
+NILE_createWindow_X11_Opengl_GlxLegacy();
+// @brief(aabib): intended to be used with opengl v[2.1]
+fn_internal int
+NILE_createWindow_X11_Opengl_GlxBase();
+// @brief(aabib): intended to be used with opengl v[3.X,4.X]
+fn_internal int
+NILE_createWindow_X11_Opengl_GlxModern();
+
+// @brief(aabib): probably wanna use it with raspberri pi?
+fn_internal int
+NILE_createWindow_X11_OpenglES_Egl();
+// @brief(aabib): fastest x11 version , lesser compatiblity
+fn_internal int
+NILE_createWindow_X11_Vulkan();
+
+// @todo(aabib): which one should you use with wayland?
+// @brief(aabib): wayland gles?
+fn_internal int
+NILE_createWindow_Wayland_OpenglES_Egl();
+// @brief(aabib): wayland vulkan?
+fn_internal int
+NILE_createWindow_Wayland_Vulkan();
 
 // @note(aabib): X11 overview
 //
-// # links:
-// https://hereket.com/posts/linux_creating_x11_windows/
-// https://tronche.com/gui/x/xlib/introduction/overview.html
-// https://tronche.com/gui/x/xlib/glossary/
-// https://docs.rs/winit/latest/winit/platform/x11/index.html
+// @links:
+// - https://hereket.com/posts/linux_creating_x11_windows/
+// - https://tronche.com/gui/x/xlib/introduction/overview.html
+// - https://tronche.com/gui/x/xlib/glossary/
+// - https://docs.rs/winit/latest/winit/platform/x11/index.html
 //
 // - The X Window System supports one or more screens containing overlapping windows or subwindows.
 // - A screen is a physical monitor and hardware, which can be either color, grayscale, or monochrome.
@@ -366,17 +416,18 @@ clamp(float min, float value, float max)
 // - Windows and pixmaps together are referred to as drawables.
 //
 // @note(aabib): Naming and Argument Conventions within Xlib
-// https://tronche.com/gui/x/xlib/introduction/naming.html
+// @links:
+// - https://tronche.com/gui/x/xlib/introduction/naming.html
 //
 // @note(aabib):
-// Coordinates and sizes in X are actually 16-bit quantities.
-// This decision was made to minimize the bandwidth required for a given level of performance.
-// Coordinates usually are declared as an int in the interface.
-// Values larger than 16 bits are truncated silently.
-// Sizes (width and height) are declared as unsigned quantities.
+// - Coordinates and sizes in X are actually 16-bit quantities.
+// - This decision was made to minimize the bandwidth required for a given level of performance.
+// - Coordinates usually are declared as an int in the interface.
+// - Values larger than 16 bits are truncated silently.
+// - Sizes (width and height) are declared as unsigned quantities.
 //
 fn_internal int
-NILE_createWindowX11()
+NILE_createWindow_X11()
 {
   // @syntax:
   // - Display *XOpenDisplay(display_name);
@@ -389,8 +440,58 @@ NILE_createWindowX11()
   // @return:
   // - If succeed , returns pointer to a Display (defined in X11/Xlib.h)
   // - If failed , returns NULL
-  // https://tronche.com/gui/x/xlib/display/opening.html
+  // @links:
+  // - https://tronche.com/gui/x/xlib/display/opening.html
   Display *main_display = XOpenDisplay(0);
+  if(main_display == NULL)
+  {
+    printf("cannot connect to X server\n");
+    return 1;
+  }
+
+  int     default_screen = XDefaultScreen(main_display);
+  Window  root_window    = XDefaultRootWindow(main_display);
+  Visual *default_visual = DefaultVisual(main_display, default_screen);
+
+  Colormap colormap = XCreateColormap(
+      main_display, root_window, default_visual, AllocNone
+  );
+
+  return 0;
+}
+
+//
+// @brief(aabib): intended to be used with opengl v[2.1]
+// @requirments:
+// - linux kernel v[]
+// - opengl v[2.1]
+// - opengl-ext []
+// - glx v[1.4]
+// - glx-ext []
+// - x11 v[]
+//
+fn_internal int
+NILE_createWindow_X11_Opengl_GlxBase()
+{
+
+  return 0;
+}
+
+//
+// @brief(aabib): intended to be used with opengl v3.X+
+// @links:
+// - https://registry.khronos.org/OpenGL/extensions/ARB/GLX_ARB_create_context.txt
+// @requirments:
+// - linux kernel v[]
+// - opengl v[3.X,4.X]
+// - opengl-ext []
+// - glx v[1.0,1.4]
+// - glx-ext []
+// - x11 v[]
+//
+fn_internal int
+NILE_createWindow_X11_Opengl_GlxModern()
+{
 
   return 0;
 }
@@ -398,7 +499,7 @@ NILE_createWindowX11()
 fn_internal int
 NILE_checkWindowEventX11()
 {
-    return 0;
+  return 0;
 }
 
 //
@@ -409,12 +510,45 @@ NILE_checkWindowEventX11()
 // Windows main
 //
 fn_internal int
-main_windows()
+NILE_createWindow_Win32_DirectX_Legacy();
+fn_internal int
+NILE_createWindow_Win32_DirectX_Base();
+fn_internal int
+NILE_createWindow_Win32_DirectX_Modern();
+
+fn_internal int
+NILE_createWindow_Win32_Opengl_WglLegacy();
+fn_internal int
+NILE_createWindow_Win32_Opengl_WglBase();
+
+fn_internal int
+NILE_createWindow_Win32_Vulkan();
+
+//
+//
+//
+fn_internal int
+NILE_createWindow_Win32_Opengl_WglBase()
 {
   return 0;
 }
+
 //
 // Windows main
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// Android main
+//
+fn_internal int
+NILE_createWindow_Android_OpenglES_EglLegacy();
+fn_internal int
+NILE_createWindow_Android_OpenglES_EglBase();
+fn_internal int
+NILE_createWindow_Android_Vulkan();
+
+//
+// Android main
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
@@ -448,7 +582,6 @@ persist_global AppWindow app_window = (AppWindow){
 int
 main()
 {
-
   return 0;
 }
 //
