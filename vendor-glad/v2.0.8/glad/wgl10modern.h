@@ -30,7 +30,7 @@
 #define GLAD_WGL_H_
 
 #include <windows.h>
-#include <glad/gl.h>
+// #include <glad/gl.h>
 
 #define GLAD_WGL
 #define GLAD_OPTION_WGL_HEADER_ONLY
@@ -441,7 +441,7 @@ int gladLoadWGLUserPtr(HDC hdc, GLADuserptrloadfunc load, void *userptr) {
 int gladLoadWGL(HDC hdc, GLADloadfunc load) {
     return gladLoadWGLUserPtr(hdc, glad_wgl_get_proc_from_userptr, GLAD_GNUC_EXTENSION (void*) load);
 }
- 
+
 
 #ifdef GLAD_WGL
 
@@ -462,4 +462,3 @@ int gladLoaderLoadWGL(HDC hdc) {
 #endif
 
 #endif /* GLAD_WGL_IMPLEMENTATION */
-
