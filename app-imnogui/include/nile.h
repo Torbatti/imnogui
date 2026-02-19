@@ -84,6 +84,13 @@
  *
  */
 
+#define NILE_PLATFORM_LINUX
+#define NILE_WINDOW_X11
+#define NILE_GLUE_GLX
+#define NILE_GLUE_GLX_MODERN
+#define NILE_GRFX_OPENGL
+#define NILE_GRFX_OPENGL_V33
+
 // https://semver.org/
 #define NILE_VERSION_MAJOR 0
 #define NILE_VERSION_MINOR 1
@@ -95,6 +102,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <string.h>
 
 #define NILE_fn_internal static
 #define NILE_fn_external extern
@@ -119,6 +127,15 @@
 #endif
 //
 // Nile Platforms
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// Nile Results
+//
+#define NILE_RESULT_SUCCESS 0
+#define NILE_RESULT_FAIL    1
+//
+// Nile Results
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
@@ -269,6 +286,28 @@
 //
 
 #if defined(NILE_PLATFORM_LINUX)
+
+# if defined(NILE_WINDOW_X11)
+//
+// @todo: better error handling
+// @todo: better logging
+// @todo: better profiling
+//
+// @todo: software rendering
+// @todo: glx legact and base
+// @todo: add more info about glx modern with extension
+//
+// @todo: better naming for NILE_WindowX11 struct fields and struct name?
+//
+// @section(x11-):
+// @section(x11-sm6sguct): x11-glx-modern create window overview
+// - @section(x11-sm6sguct-ms896bep): idk?
+// - @section(x11-sm6sguct-dbzvdgqa): create glx context
+// - @section(x11-sm6sguct-rkrwvtxe): load gl from gladloader
+// @section(x11-x49awnqj): x11-glx close window overview
+// @section(x11-yzed2mnd): x11-glx swap window buffer overview
+
+//
 // @note(aabib): X11 overview
 //
 // @links:
@@ -306,28 +345,73 @@
 // - Values larger than 16 bits are truncated silently.
 // - Sizes (width and height) are declared as unsigned quantities.
 //
-# if defined(NILE_WINDOW_X11)
-NILE_fn_internal int
-NILE_createWindow_X11()
+
+//
+// @section(x11-sm6sguct-ms896bep): info
+//
+// @syntax:
+// - Display *XOpenDisplay(display_name);
+// @argument: display_name
+// - char *display_name;
+// - Specifies the hardware display name, which determines the display \
+// and communications domain to be used.
+//  - On a POSIX-conformant system, if the display_name is NULL,
+//  it defaults to the value of the DISPLAY environment variable.
+// @return:
+// - If succeed , returns pointer to a Display (defined in X11/Xlib.h)
+// - If failed , returns NULL
+// @links:
+// - https://tronche.com/gui/x/xlib/display/opening.html
+//
+//
+// XCreateWindow , XCreateSimpleWindow
+// @links:
+// - https://tronche.com/gui/x/xlib/window/XCreateWindow.html
+//
+// Window XCreateWindow(display, parent, x, y, width, height, border_width, depth,
+//                        class, visual, valuemask, attributes)
+// Display *display;
+// Window parent;
+// int x, y;
+// unsigned int width, height;
+// unsigned int border_width;
+// int depth;
+// unsigned int class;
+// Visual *visual
+// unsigned long valuemask;
+// XSetWindowAttributes *attributes;
+//
+
+typedef struct NILE_WindowX11 {
+  // void      *_buffer;
+  // Window     _root_window;
+  Display   *display;
+  Window     window;
+  GLXContext context;
+  Colormap   colormap;
+} NILE_WindowX11;
+
+// @section(x11-sm6sguct): start
+NILE_fn_internal NILE_WindowX11 *
+NILE_createWindow_X11_Modern(NILE_WindowX11 *winx11)
 {
-  // @syntax:
-  // - Display *XOpenDisplay(display_name);
-  // @argument: display_name
-  // - char *display_name;
-  // - Specifies the hardware display name, which determines the display \
-  // and communications domain to be used.
-  //  - On a POSIX-conformant system, if the display_name is NULL,
-  //  it defaults to the value of the DISPLAY environment variable.
-  // @return:
-  // - If succeed , returns pointer to a Display (defined in X11/Xlib.h)
-  // - If failed , returns NULL
-  // @links:
-  // - https://tronche.com/gui/x/xlib/display/opening.html
-  Display *main_display = XOpenDisplay(0);
+
+  //
+  // @note: arena allocator like buffer
+  //
+  // uint64_t x11_buffer_cap = 4 * 1024 * 1024;
+  // uint64_t x11_buffer_pos = 0;
+  // void    *x11_buffer     = malloc(x11_buffer_cap);
+  //
+
+  // @section(x11-sm6sguct-ms896bep): start
+  // @brief:
+  Display *main_display = (Display *)XOpenDisplay(0);
+
   if(main_display == NULL)
   {
     printf("cannot connect to X server\n");
-    return 1;
+    return NULL;
   }
   int     default_screen = XDefaultScreen(main_display);
   Window  root_window    = XDefaultRootWindow(main_display);
@@ -335,35 +419,13 @@ NILE_createWindow_X11()
   if(default_visual == NULL)
   {
     printf("cannot connect to X server\n");
-    return 1;
+    return NULL;
   }
 
-  //
-  //
-  //
-  //
   Colormap colormap = XCreateColormap(
       main_display, root_window, default_visual, AllocNone
   );
 
-  //
-  // XCreateWindow , XCreateSimpleWindow
-  // @links:
-  // - https://tronche.com/gui/x/xlib/window/XCreateWindow.html
-  //
-  // Window XCreateWindow(display, parent, x, y, width, height, border_width, depth,
-  //                        class, visual, valuemask, attributes)
-  // Display *display;
-  // Window parent;
-  // int x, y;
-  // unsigned int width, height;
-  // unsigned int border_width;
-  // int depth;
-  // unsigned int class;
-  // Visual *visual
-  // unsigned long valuemask;
-  // XSetWindowAttributes *attributes;
-  //
   int                  window_x            = 0;
   int                  window_y            = 0;
   int                  window_width        = 1024;
@@ -389,29 +451,23 @@ NILE_createWindow_X11()
   if(!window)
   {
     printf("Unable to create window.\n");
-    return 1;
+    return NULL;
   }
+  // @section(x11-sm6sguct-ms896bep): end
 
-  //
-  //
-  //
-  //
+  // @section(x11-sm6sguct-dbzvdgqa): start
+  // @brief: glx modern context initialization
   int glx_version = gladLoaderLoadGLX(main_display, default_screen);
   if(!glx_version)
   {
     printf("Unable to load GLX.\n");
-    return 1;
+    return NULL;
   }
   printf(
       "Loaded GLX %d.%d\n", GLAD_VERSION_MAJOR(glx_version),
       GLAD_VERSION_MINOR(glx_version)
   );
 
-//
-//
-//
-// @todo:
-#  if defined(NILE_GLUE_GLX_MODERN)
   GLint visual_attributes []
       = {GLX_RENDER_TYPE, GLX_RGBA_BIT, GLX_DOUBLEBUFFER, 1, None};
 
@@ -435,75 +491,64 @@ NILE_createWindow_X11()
   if(!context)
   {
     printf("Unable to create OpenGL context.\n");
-    return 1;
+    return NULL;
   }
 
   glXMakeCurrent(main_display, window, context);
-#  endif
+  // @section(x11-sm6sguct-dbzvdgqa): end
 
-  //
-  //
-  //
-  //
+  // @section(x11-sm6sguct-rkrwvtxe): start
+  // @brief: load gl from gladloader
   int gl_version = gladLoaderLoadGL();
   if(!gl_version)
   {
     printf("Unable to load GL.\n");
-    return 1;
+    return NULL;
   }
   printf(
       "Loaded GL %d.%d\n", GLAD_VERSION_MAJOR(gl_version),
       GLAD_VERSION_MINOR(gl_version)
   );
+  // @section(x11-sm6sguct-rkrwvtxe): end
 
-  //
-  //
-  //
-  //
   XWindowAttributes gwa;
   XGetWindowAttributes(main_display, window, &gwa);
   glViewport(0, 0, gwa.width, gwa.height);
 
-  //
-  //
-  //
-  bool quit = false;
-  while(!quit)
-  {
-    while(XPending(main_display))
-    {
-      XEvent xev;
-      XNextEvent(main_display, &xev);
-
-      if(xev.type == KeyPress)
-      {
-        quit = true;
-      }
-    }
-
-    glClearColor(0.8, 0.6, 0.7, 1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glXSwapBuffers(main_display, window);
-
-    usleep(1000 * 10);
-  }
-
-  //
-  //
-  //
-  //
-  glXMakeCurrent(main_display, 0, 0);
-  glXDestroyContext(main_display, context);
-
-  XDestroyWindow(main_display, window);
-  XFreeColormap(main_display, colormap);
-  XCloseDisplay(main_display);
-
-  gladLoaderUnloadGLX();
+  winx11->window   = window;
+  winx11->context  = context;
+  winx11->display  = main_display;
+  winx11->colormap = colormap;
 
   return 0;
 }
+// @section(x11-sm6sguct): end
+
+// @section(x11-x49awnqj): start
+NILE_fn_internal int
+NILE_closeWindow_X11_Modern(NILE_WindowX11 *win)
+{
+  glXMakeCurrent(win->display, 0, 0);
+  glXDestroyContext(win->display, win->context);
+
+  XDestroyWindow(win->display, win->window);
+  XFreeColormap(win->display, win->colormap);
+  XCloseDisplay(win->display);
+
+  gladLoaderUnloadGLX();
+
+  return NILE_RESULT_SUCCESS;
+}
+// @section(x11-x49awnqj): end
+
+// @section(x11-yzed2mnd): start
+NILE_fn_internal int
+NILE_windowSwapBuffers_X11_Modern(NILE_WindowX11 *win)
+{
+  glXSwapBuffers(win->display, win->window);
+  return 0;
+}
+// @section(x11-yzed2mnd): end
 
 # endif
 
@@ -1012,14 +1057,69 @@ NILE_createWindow_Android()
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
-// Create Window
+// Cross Window
 //
-NILE_fn_internal int
-NILE_createWindow()
+
+// @todo: find a way to not pass void pointers
+typedef struct NILE_Window {
+  void *window_x11;
+  void *window_win32;
+  void *window_android;
+  void *window_wasm;
+  void *window_macos;
+  void *window_ios;
+} NILE_Window;
+
+NILE_fn_internal NILE_Window *
+NILE_createWindow(
+    const char *name, int x, int y, int w, int h, int flags
+)
 {
+  NILE_Window *window = (NILE_Window *)malloc(sizeof(NILE_Window));
+
+#if defined(NILE_WINDOW_X11)
+  window->window_x11 = (NILE_WindowX11 *)malloc(sizeof(NILE_WindowX11));
+
+  NILE_WindowX11 *windowX11
+      = NILE_createWindow_X11_Modern(window->window_x11);
+  if(windowX11 != NULL)
+  {
+    window->window_x11 = windowX11;
+  }
+#endif
+
+  return window;
+}
+
+NILE_fn_internal int
+NILE_closeWindow(NILE_Window *window)
+{
+
+#if defined(NILE_WINDOW_X11)
+  if(window->window_x11 != NULL)
+  {
+    free(window->window_x11);
+  }
+#endif
+
+  free(window);
+  return 0;
+}
+
+NILE_fn_internal int
+NILE_windowSwapBuffers(NILE_Window *window)
+{
+
+#if defined(NILE_WINDOW_X11)
+  if(window->window_x11 != NULL)
+  {
+    int result = NILE_windowSwapBuffers_X11_Modern(window->window_x11);
+  }
+#endif
 
   return 0;
 }
+
 //
-// Create Window
+// Cross Window
 // ----------------------------------------------------------------------------
