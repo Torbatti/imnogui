@@ -85,12 +85,43 @@ persist_global AppWindow app_window = (AppWindow){
     .height = 512,
     .x      = 0,
     .y      = 0,
-    .name   = "Raycaster",
+    .name   = "ImNoGui",
 };
 
 int
 main()
 {
+
+  NILE_Window *window = NILE_createWindow(
+      app_window.name, app_window.x, app_window.y, app_window.width,
+      app_window.height, (u64)0
+  );
+
+  int quit = false;
+  while(!quit)
+  {
+
+    // while(XPending(window->x11_window->display))
+    // {
+    //   XEvent xev;
+    //   XNextEvent(window->x11_window->display, &xev);
+
+    //   if(xev.type == KeyPress)
+    //   {
+    //     quit = true;
+    //   }
+    // }
+
+    glClearColor(0.8, 0.6, 0.7, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    NILE_windowSwapBuffers(window);
+
+    usleep(1000 * 10);
+  }
+
+  int close_window_resault = NILE_closeWindow(window);
+
   return 0;
 }
 //
