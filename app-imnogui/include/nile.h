@@ -99,6 +99,7 @@
 
 #define NILE_fn_internal static
 #define NILE_fn_external extern
+#define NILE_assert      assert
 
 // ----------------------------------------------------------------------------
 // Nile Platforms
@@ -297,6 +298,7 @@
 // - @section(x11-sm6sguct-ms896bep): idk?
 // - @section(x11-sm6sguct-dbzvdgqa): create glx context
 // - @section(x11-sm6sguct-rkrwvtxe): load gl from gladloader
+// - @section(x11-sm6sguct-kfnzz886): get window attributes + set glviewport if gl/glx is enabled
 // @section(x11-x49awnqj): x11-glx close window overview
 // @section(x11-yzed2mnd): x11-glx swap window buffer overview
 
@@ -385,9 +387,11 @@ typedef struct NILE_WindowX11 {
 } NILE_WindowX11;
 
 // @section(x11-sm6sguct): start
-NILE_fn_internal NILE_WindowX11 *
-NILE_createWindow_X11_Modern(NILE_WindowX11 *winx11)
+#  if defined(NILE_GRFX_OPENGL) && defined(NILE_GLUE_GLX)
+NILE_fn_internal int
+NILE_createWindow_X11_GLX(NILE_WindowX11 *winx11)
 {
+  NILE_assert(winx11 != NULL);
 
   //
   // @note: arena allocator like buffer
@@ -404,21 +408,59 @@ NILE_createWindow_X11_Modern(NILE_WindowX11 *winx11)
   if(main_display == NULL)
   {
     printf("cannot connect to X server\n");
-    return NULL;
+    return NILE_RESULT_FAIL;
   }
-  int     default_screen = XDefaultScreen(main_display);
-  Window  root_window    = XDefaultRootWindow(main_display);
+  NILE_assert(main_display != NULL);
+
+  int    default_screen = XDefaultScreen(main_display);
+  Window root_window    = XDefaultRootWindow(main_display);
+  // @section(x11-sm6sguct-ms896bep): end
+
+  // @section(x11-sm6sguct-dbzvdgqa): start
+  // @brief: glx modern context initialization
+  // @todo: rework and rename this!
+  int glx_version = gladLoaderLoadGLX(main_display, default_screen);
+  if(!glx_version)
+  {
+    printf("Unable to load GLX.\n");
+    return NILE_RESULT_FAIL;
+  }
+  printf(
+      "Loaded GLX %d.%d\n", GLAD_VERSION_MAJOR(glx_version),
+      GLAD_VERSION_MINOR(glx_version)
+  );
+
+  // @todo: new section start
+#   if defined(NILE_GLUE_GLX_BASE)
+  GLint visual_attributes [] = {GLX_RGBA, GLX_DOUBLEBUFFER, None};
+  XVisualInfo *visual_info   = glXChooseVisual(
+      main_display, default_screen, visual_attributes
+  );
+  if(visual_info == NULL)
+  {
+    printf("cannot connect to X server\n");
+    return NILE_RESULT_FAIL;
+  }
+  NILE_assert(visual_info != NULL);
+
+  Colormap colormap = XCreateColormap(
+      main_display, root_window, visual_info->visual, AllocNone
+  );
+#   endif
+#   if defined(NILE_GLUE_GLX_MODERN)
   Visual *default_visual = DefaultVisual(main_display, default_screen);
   if(default_visual == NULL)
   {
     printf("cannot connect to X server\n");
-    return NULL;
+    return NILE_RESULT_FAIL;
   }
-
   Colormap colormap = XCreateColormap(
       main_display, root_window, default_visual, AllocNone
   );
+#   endif
+  // @todo: new section end
 
+  // @todo: new section start
   int                  window_x            = 0;
   int                  window_y            = 0;
   int                  window_width        = 1024;
@@ -430,37 +472,45 @@ NILE_createWindow_X11_Modern(NILE_WindowX11 *winx11)
   XSetWindowAttributes attributes;
   attributes.event_mask = ExposureMask | KeyPressMask | KeyReleaseMask;
   attributes.colormap   = colormap;
+  // @todo: new section end
 
+  // @todo: new section start
+#   if defined(NILE_GLUE_GLX_BASE)
+  Window window = XCreateWindow(
+      main_display, root_window, window_x, window_y, window_width,
+      window_height, window_border_width,
+      DefaultDepth(main_display, default_screen), InputOutput,
+      visual_info->visual, CWColormap | CWEventMask, &attributes
+  );
+#   endif
+#   if defined(NILE_GLUE_GLX_MODERN)
   Window window = XCreateWindow(
       main_display, root_window, window_x, window_y, window_width,
       window_height, window_border_width,
       DefaultDepth(main_display, default_screen), InputOutput,
       default_visual, CWColormap | CWEventMask, &attributes
   );
+#   endif
+  // @todo: new section end
 
   XMapWindow(main_display, window);
-  XStoreName(main_display, window, "[glad] Modern GLX with X11");
+  XStoreName(
+      main_display, window,
+      "[glad] Modern/Base GLX with X11 - this is intentional"
+  );
 
   if(!window)
   {
     printf("Unable to create window.\n");
-    return NULL;
+    return NILE_RESULT_FAIL;
   }
-  // @section(x11-sm6sguct-ms896bep): end
 
-  // @section(x11-sm6sguct-dbzvdgqa): start
-  // @brief: glx modern context initialization
-  int glx_version = gladLoaderLoadGLX(main_display, default_screen);
-  if(!glx_version)
-  {
-    printf("Unable to load GLX.\n");
-    return NULL;
-  }
-  printf(
-      "Loaded GLX %d.%d\n", GLAD_VERSION_MAJOR(glx_version),
-      GLAD_VERSION_MINOR(glx_version)
-  );
-
+  // @todo: new section start
+#   if defined(NILE_GLUE_GLX_BASE)
+  GLXContext context
+      = glXCreateContext(main_display, visual_info, NULL, GL_TRUE);
+#   endif
+#   if defined(NILE_GLUE_GLX_MODERN)
   GLint visual_attributes []
       = {GLX_RENDER_TYPE, GLX_RGBA_BIT, GLX_DOUBLEBUFFER, 1, None};
 
@@ -484,8 +534,10 @@ NILE_createWindow_X11_Modern(NILE_WindowX11 *winx11)
   if(!context)
   {
     printf("Unable to create OpenGL context.\n");
-    return NULL;
+    return NILE_RESULT_FAIL;
   }
+#   endif
+  // @todo: new section end
 
   glXMakeCurrent(main_display, window, context);
   // @section(x11-sm6sguct-dbzvdgqa): end
@@ -496,7 +548,7 @@ NILE_createWindow_X11_Modern(NILE_WindowX11 *winx11)
   if(!gl_version)
   {
     printf("Unable to load GL.\n");
-    return NULL;
+    return NILE_RESULT_FAIL;
   }
   printf(
       "Loaded GL %d.%d\n", GLAD_VERSION_MAJOR(gl_version),
@@ -504,10 +556,13 @@ NILE_createWindow_X11_Modern(NILE_WindowX11 *winx11)
   );
   // @section(x11-sm6sguct-rkrwvtxe): end
 
+  // @section(x11-sm6sguct-kfnzz886): start
   XWindowAttributes gwa;
   XGetWindowAttributes(main_display, window, &gwa);
   glViewport(0, 0, gwa.width, gwa.height);
+  // @section(x11-sm6sguct-kfnzz886): end
 
+  NILE_assert(main_display != NULL);
   winx11->window   = window;
   winx11->context  = context;
   winx11->display  = main_display;
@@ -519,8 +574,10 @@ NILE_createWindow_X11_Modern(NILE_WindowX11 *winx11)
 
 // @section(x11-x49awnqj): start
 NILE_fn_internal int
-NILE_closeWindow_X11_Modern(NILE_WindowX11 *win)
+NILE_closeWindow_X11_GLX(NILE_WindowX11 *win)
 {
+  NILE_assert(win->display != NULL);
+
   glXMakeCurrent(win->display, 0, 0);
   glXDestroyContext(win->display, win->context);
 
@@ -536,14 +593,18 @@ NILE_closeWindow_X11_Modern(NILE_WindowX11 *win)
 
 // @section(x11-yzed2mnd): start
 NILE_fn_internal int
-NILE_windowSwapBuffers_X11_Modern(NILE_WindowX11 *win)
+NILE_windowSwapBuffers_X11_GLX(NILE_WindowX11 *win)
 {
   glXSwapBuffers(win->display, win->window);
   return 0;
 }
 // @section(x11-yzed2mnd): end
 
+#  endif
+// @endif: defined(NILE_GRFX_OPENGL) && defined(NILE_GLUE_GLX)
+
 # endif
+// @endif: defined(NILE_WINDOW_X11)
 
 # if defined(NILE_WINDOW_WAYLAND)
 # endif
@@ -1072,13 +1133,10 @@ NILE_createWindow(
 
 #if defined(NILE_WINDOW_X11)
   window->window_x11 = (NILE_WindowX11 *)malloc(sizeof(NILE_WindowX11));
+  NILE_assert(window->window_x11 != NULL);
 
-  NILE_WindowX11 *windowX11
-      = NILE_createWindow_X11_Modern(window->window_x11);
-  if(windowX11 != NULL)
-  {
-    window->window_x11 = windowX11;
-  }
+  int createWindow_result
+      = NILE_createWindow_X11_GLX((NILE_WindowX11 *)window->window_x11);
 #endif
 
   return window;
@@ -1089,10 +1147,11 @@ NILE_closeWindow(NILE_Window *window)
 {
 
 #if defined(NILE_WINDOW_X11)
-  if(window->window_x11 != NULL)
-  {
-    free(window->window_x11);
-  }
+  NILE_assert(window->window_x11 != NULL);
+  int closeWindow_result
+      = NILE_closeWindow_X11_GLX((NILE_WindowX11 *)window->window_x11);
+
+  free((NILE_WindowX11 *)window->window_x11);
 #endif
 
   free(window);
@@ -1104,10 +1163,8 @@ NILE_windowSwapBuffers(NILE_Window *window)
 {
 
 #if defined(NILE_WINDOW_X11)
-  if(window->window_x11 != NULL)
-  {
-    int result = NILE_windowSwapBuffers_X11_Modern(window->window_x11);
-  }
+  NILE_assert(window->window_x11 != NULL);
+  int result = NILE_windowSwapBuffers_X11_GLX(window->window_x11);
 #endif
 
   return 0;
