@@ -44,7 +44,8 @@
 # define NILE_PLATFORM_LINUX
 # define NILE_WINDOW_X11
 # define NILE_GLUE_GLX
-# define NILE_GLUE_GLX_MODERN
+# define NILE_GLUE_GLX_BASE
+// # define NILE_GLUE_GLX_MODERN
 # define NILE_GRFX_OPENGL
 # define NILE_GRFX_OPENGL_V33
 #endif
@@ -96,21 +97,24 @@ main()
       app_window.name, app_window.x, app_window.y, app_window.width,
       app_window.height, (u64)0
   );
+  assert(window != NULL);
 
   int quit = false;
   while(!quit)
   {
 
-    // while(XPending(window->x11_window->display))
-    // {
-    //   XEvent xev;
-    //   XNextEvent(window->x11_window->display, &xev);
+#if defined(NILE_WINDOW_X11)
+    while(XPending(((NILE_WindowX11 *)window->window_x11)->display))
+    {
+      XEvent xev;
+      XNextEvent(((NILE_WindowX11 *)window->window_x11)->display, &xev);
 
-    //   if(xev.type == KeyPress)
-    //   {
-    //     quit = true;
-    //   }
-    // }
+      if(xev.type == KeyPress)
+      {
+        quit = true;
+      }
+    }
+#endif
 
     glClearColor(0.8, 0.6, 0.7, 1.0);
     glClear(GL_COLOR_BUFFER_BIT);
