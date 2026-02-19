@@ -84,13 +84,6 @@
  *
  */
 
-#define NILE_PLATFORM_LINUX
-#define NILE_WINDOW_X11
-#define NILE_GLUE_GLX
-#define NILE_GLUE_GLX_MODERN
-#define NILE_GRFX_OPENGL
-#define NILE_GRFX_OPENGL_V33
-
 // https://semver.org/
 #define NILE_VERSION_MAJOR 0
 #define NILE_VERSION_MINOR 1
