@@ -30,13 +30,6 @@
  * SUCH DAMAGE.
  */
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <unistd.h>
-
 // @todo(aabib): this needs fixing!!! cant use it this way it feels too cumbersome!
 // @todo(aabib): windows windowing api needs a better name than `win32`
 #include "../include/defd.h"
@@ -56,6 +49,16 @@
 # define NILE_GLUE_WGL_MODERN
 # define NILE_GRFX_OPENGL
 # define NILE_GRFX_OPENGL_V33
+#endif
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+#if defined(DEFD_PLATFORM_LINUX)
+# include <unistd.h>
 #endif
 
 #include "../include/nile.h"
@@ -121,7 +124,12 @@ main()
 
     NILE_windowSwapBuffers(window);
 
+#if defined(NILE_PLATFORM_LINUX)
     usleep(1000 * 10);
+#endif
+#if defined(NILE_PLATFORM_WINDOWS)
+    Sleep(1000 * 10);
+#endif
   }
 
   int close_window_resault = NILE_closeWindow(window);
