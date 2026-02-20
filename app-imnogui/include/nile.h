@@ -640,6 +640,13 @@ typedef struct NILE_Window_Win32 {
   HGLRC hgl_context;
 } NILE_Window_Win32;
 
+// NOTE(AABIB):
+//   A callback function, that processes messages sent to a window
+//   https://learn.microsoft.com/en-us/windows/win32/api/winuser/nc-winuser-wndproc
+//   https://learn.microsoft.com/en-us/windows/win32/learnwin32/writing-the-window-procedure
+//   https://learn.microsoft.com/en-us/windows/win32/winmsg/window-notifications
+//   https://learn.microsoft.com/en-us/windows/win32/winmsg/about-messages-and-message-queues#system-defined-messages
+//
 LRESULT CALLBACK
 NILE_win32_defaultWindowCallback(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
@@ -658,6 +665,59 @@ NILE_win32_defaultWindowCallback(
   return (Resault);
 }
 
+// GetStartupInfoW  doesnt work correctly
+// https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow
+//
+// Window Class
+//
+// NOTE(AABI):
+//   WNDCLASSEX (A/W) -> RegisterClassEx and GetClassInfoEx
+//   maximum length of lpszClassName is 256
+//   https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassa
+//   https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassexa
+//
+// NOTE(AABI):
+//   When you create your HWND, you need to make sure that it has the CS_OWNDC set for its style.
+//   https://www.khronos.org/opengl/wiki/Creating_an_OpenGL_Context_(WGL)
+//   https://learn.microsoft.com/en-us/windows/win32/api/_opengl/
+//
+//
+// NOTE(AABIB):
+//   https://learn.microsoft.com/en-us/windows/win32/learnwin32/your-first-windows-program
+//   https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-winmain
+//
+// TODO(AABIB):
+//   When can we get a hdc and where do we get it?
+//
+// @notes:
+// - An excerpt from the book Windows Via C/C++ [1]
+// - Note As it turns out, HMODULEs and HINSTANCEs are exactly the same thing. If the \
+// documentation for a function indicates that an HMODULE is required, you can pass an \
+// HINSTANCE and vice versa. There are two data types because in 16-bit Windows HMODULEs \
+// and HINSTANCEs identified different things/
+// - [1] Richter, Jeffery and Nasarre, Christophe, Windows Via C/C++, 5th ed, Redmond: Microsoft Press 2008, pp. 74
+//
+// @links:
+// - https://stackoverflow.com/questions/2126657/how-can-i-get-hinstance-from-a-dll
+// - https://devblogs.microsoft.com/oldnewthing/20040614-00/?p=38903
+// - https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlea
+//
+// @notes: wgl extensions
+// - https://registry.khronos.org/OpenGL/extensions/ARB/WGL_ARB_create_context.txt
+//
+// TODO: read what <THIS> does
+// MessageBox MSDN
+// GetSystemMetrics MSDN :
+// // // Determine the resolution of the clients desktop screen.
+// // screenWidth  = GetSystemMetrics(SM_CXSCREEN);
+// // screenHeight = GetSystemMetrics(SM_CYSCREEN);
+//
+// NOTE(AABIB):
+//   https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessage
+//
+// NOTE(AABI): Funny enough peekmessage used to return -1 on err xD
+// If a message is available, the return value is nonzero.
+// If no messages are available, the return value is zero.
 NILE_fn_internal int
 NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
 {
@@ -669,8 +729,8 @@ NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
   // @section(): end
 
   // @section(): start
-  WNDCLASSEXA window_class_exa = {0};
-  window_class_exa.cbSize      = sizeof(WNDCLASSEXA);
+  WNDCLASSEXA window_class_exa   = {0};
+  window_class_exa.cbSize        = sizeof(WNDCLASSEXA);
   window_class_exa.style         = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
   window_class_exa.lpfnWndProc   = NILE_win32_defaultWindowCallback;
   window_class_exa.cbClsExtra    = 0;
@@ -700,7 +760,7 @@ NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
   int    window_y             = CW_USEDEFAULT;
   int    window_width         = CW_USEDEFAULT; // CW_USEDEFAULT
   int    window_height        = CW_USEDEFAULT; // CW_USEDEFAULT
-  HWND HWindow = CreateWindowExA(
+  HWND   HWindow              = CreateWindowExA(
       0, window_class_exa.lpszClassName, Win32_MainWindowName,
       WS_OVERLAPPEDWINDOW | WS_VISIBLE, window_x, window_y,
       window_width, window_height, 0, 0, Instance, 0
@@ -818,8 +878,6 @@ NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
     return -1;
   }
   // Show & Update the main window:
-  // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow
-
   ShowWindow(HWindow, SW_SHOWDEFAULT);
   UpdateWindow(HWindow);
   // @section(): end
