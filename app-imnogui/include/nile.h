@@ -84,6 +84,13 @@
  *
  */
 
+#define NILE_PLATFORM_WINDOWS
+#define NILE_WINDOW_WIN32
+#define NILE_GLUE_WGL
+#define NILE_GLUE_WGL_MODERN
+#define NILE_GRFX_OPENGL
+#define NILE_GRFX_OPENGL_V33
+
 // https://semver.org/
 #define NILE_VERSION_MAJOR 0
 #define NILE_VERSION_MINOR 1
@@ -94,12 +101,18 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <unistd.h>
 #include <string.h>
+// #include <unistd.h>
 
-#define NILE_fn_internal static
-#define NILE_fn_external extern
-#define NILE_assert      assert
+#define NILE_persist_global static
+#define NILE_persist_local  static
+#define NILE_fn_internal    static
+#define NILE_fn_external    extern
+
+#define NILE_RESULT_SUCCESS 0
+#define NILE_RESULT_FAIL    1
+
+#define NILE_assert assert
 
 // ----------------------------------------------------------------------------
 // Nile Platforms
@@ -109,7 +122,6 @@
 #endif
 #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
 # define NILE_PLATFORM_WINDOWS
-# warning "Platform Not implemented Yet!"
 #endif
 #if defined(__ANDROID__)
 # define NILE_PLATFORM_ANDROID
@@ -121,15 +133,6 @@
 #endif
 //
 // Nile Platforms
-// ----------------------------------------------------------------------------
-
-// ----------------------------------------------------------------------------
-// Nile Results
-//
-#define NILE_RESULT_SUCCESS 0
-#define NILE_RESULT_FAIL    1
-//
-// Nile Results
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
@@ -190,7 +193,9 @@
 // @brief(aabib): on linux if opengl(gapi) and x11(wapi) is selected , defaults to glx
 # if defined(NILE_PLATFORM_LINUX) && defined(NILE_WINDOW_X11)
 // @note: `GLAD_GLX_IMPLEMENTATION` Enables Glad GLX
-#  define GLAD_GLX_IMPLEMENTATION
+#  if defined(NILE_GLUE_GLX)
+#   define GLAD_GLX_IMPLEMENTATION
+#  endif
 #  if defined(NILE_GLUE_GLX_LEGACY)
 #   include <glad/glx10.h>
 #  endif
@@ -205,8 +210,16 @@
 // @brief(aabib): on windows if opengl(gapi) is selected , defaults to wgl
 # if defined(NILE_PLATFORM_WINDOWS)
 // @note: `GLAD_WGL_IMPLEMENTATION` Enables Glad WGL
-#  define GLAD_WGL_IMPLEMENTATION
-#  include <glad/wgl10.h>
+#  if defined(NILE_GLUE_WGL)
+#   define GLAD_WGL_IMPLEMENTATION
+#  endif
+#  if defined(NILE_GLUE_WGL_BASE)
+#   include <glad/wgl10.h>
+#  endif
+#  if defined(NILE_GLUE_WGL_MODERN)
+#   include <glad/wgl10modern.h>
+#  endif
+
 # endif
 
 #endif
@@ -576,6 +589,7 @@ NILE_createWindow_X11_GLX(NILE_WindowX11 *winx11)
 NILE_fn_internal int
 NILE_closeWindow_X11_GLX(NILE_WindowX11 *win)
 {
+  NILE_assert(winx11 != NULL);
   NILE_assert(win->display != NULL);
 
   glXMakeCurrent(win->display, 0, 0);
@@ -595,6 +609,7 @@ NILE_closeWindow_X11_GLX(NILE_WindowX11 *win)
 NILE_fn_internal int
 NILE_windowSwapBuffers_X11_GLX(NILE_WindowX11 *win)
 {
+  NILE_assert(winx11 != NULL);
   glXSwapBuffers(win->display, win->window);
   return 0;
 }
@@ -619,175 +634,45 @@ NILE_windowSwapBuffers_X11_GLX(NILE_WindowX11 *win)
 // Windows main
 //
 #if defined(NILE_PLATFORM_WINDOWS)
-NILE_fn_internal int
-NILE_createWindow_X11()
-{
+typedef struct NILE_Window_Win32 {
+  HWND  hwindow;
+  HDC   hcontext;
+  HGLRC hgl_context;
+} NILE_Window_Win32;
 
-  return 0;
-}
-//
-// TODO: read what <THIS> does
-// MessageBox MSDN
-// GetSystemMetrics MSDN :
-// // // Determine the resolution of the clients desktop screen.
-// // screenWidth  = GetSystemMetrics(SM_CXSCREEN);
-// // screenHeight = GetSystemMetrics(SM_CYSCREEN);
-//
-
-// NOTE(AABI) : Temporary persist_global
-// persist_global BITMAPINFO BitmapInfo;       // TODO(AABI): remove later
-// persist_global void      *BitmapMemory;     // TODO(AABI): remove later
-// persist_global int        BitmapWidth;      // TODO(AABI): remove later
-// persist_global int        BitmapHeight;     // TODO(AABI): remove later
-// persist_global int        BytePerPixel = 4; // TODO(AABI): remove later
-// persist_global b8         Win32_G_DefaultWindowRunning = true;
-
-//
-// ???
-//
-// NOTE(AABIB):
-//   A callback function, that processes messages sent to a window
-//   https://learn.microsoft.com/en-us/windows/win32/api/winuser/nc-winuser-wndproc
-//   https://learn.microsoft.com/en-us/windows/win32/learnwin32/writing-the-window-procedure
-//   https://learn.microsoft.com/en-us/windows/win32/winmsg/window-notifications
-//   https://learn.microsoft.com/en-us/windows/win32/winmsg/about-messages-and-message-queues#system-defined-messages
-//
-NILE_fn_internal LRESULT CALLBACK
+LRESULT CALLBACK
 NILE_win32_defaultWindowCallback(
-    HWND Window, UINT Message, WPARAM WParam, LPARAM LParam
+    HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 )
 {
   LRESULT Resault = 0;
 
-  switch(Message)
+  switch(uMsg)
   {
-    case WM_SIZE :
-      {
-        OutputDebugStringA("WM_SIZE\n");
-      }
-      break;
-
-    case WM_DESTROY :
-      {
-        // TODO: Handle this as an error - recreate window
-        Win32_G_DefaultWindowRunning = false;
-        OutputDebugStringA("WM_DESTROY\n");
-      }
-      break;
-
-    case WM_CLOSE :
-      {
-        // TODO: Handle this with a message to the user
-        Win32_G_DefaultWindowRunning = false;
-        PostQuitMessage(0);
-
-        OutputDebugStringA("WM_CLOSE\n");
-      }
-      break;
-
-    case WM_ACTIVATEAPP :
-      {
-        OutputDebugStringA("WM_ACTIVATEAPP\n");
-      }
-      break;
-
-    // paint when windows is blocking -- hmh ep5 90:20
-    case WM_PAINT :
-      {
-        PAINTSTRUCT Paint;
-
-        HDC DeviceContext = BeginPaint(Window, &Paint);
-
-        LONG X      = Paint.rcPaint.left;
-        LONG Y      = Paint.rcPaint.top;
-        LONG Height = Paint.rcPaint.bottom - Paint.rcPaint.top;
-        LONG Width  = Paint.rcPaint.right - Paint.rcPaint.left;
-
-        RECT ClientRect;
-        GetClientRect(Window, &ClientRect);
-
-        //
-        //
-        //  Win32_DisplayBufferWindow
-        int WindowWidth  = ClientRect.right - ClientRect.left;
-        int WindowHeight = ClientRect.bottom - ClientRect.top;
-
-        StretchDIBits(
-            DeviceContext, 0, 0, WindowWidth, WindowHeight, 0, 0,
-            BitmapWidth, BitmapHeight, BitmapMemory, &BitmapInfo,
-            DIB_RGB_COLORS, SRCCOPY
-        );
-
-        BOOL EndPaintResault = EndPaint(Window, &Paint);
-      }
-      break;
-
-    default :
-      Resault = DefWindowProcA(Window, Message, WParam, LParam);
-      break;
+    case WM_QUIT :
+    case WM_CLOSE   : DestroyWindow(hWnd); break;
+    case WM_DESTROY : PostQuitMessage(0); break;
+    default         : return DefWindowProc(hWnd, uMsg, wParam, lParam);
   }
 
   return (Resault);
 }
 
-//
-// ????
-//
-// NOTE(AABIB):
-//   https://learn.microsoft.com/en-us/windows/win32/learnwin32/your-first-windows-program
-//   https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-winmain
-//
-// TODO(AABIB):
-//   When can we get a hdc and where do we get it?
-//
-// @notes:
-// - An excerpt from the book Windows Via C/C++ [1]
-// - Note As it turns out, HMODULEs and HINSTANCEs are exactly the same thing. If the \
-// documentation for a function indicates that an HMODULE is required, you can pass an \
-// HINSTANCE and vice versa. There are two data types because in 16-bit Windows HMODULEs \
-// and HINSTANCEs identified different things/
-// - [1] Richter, Jeffery and Nasarre, Christophe, Windows Via C/C++, 5th ed, Redmond: Microsoft Press 2008, pp. 74
-//
-// @links:
-// - https://stackoverflow.com/questions/2126657/how-can-i-get-hinstance-from-a-dll
-// - https://devblogs.microsoft.com/oldnewthing/20040614-00/?p=38903
-// - https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlea
-//
-// @notes: wgl extensions
-// - https://registry.khronos.org/OpenGL/extensions/ARB/WGL_ARB_create_context.txt
-//
-int CALLBACK
-WinMain(
-    HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine,
-    int ShowCmd
-)
+NILE_fn_internal int
+NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
 {
-  UNREFERENCED_PARAMETER(hPrevInstance);
-  UNREFERENCED_PARAMETER(lpCmdLine);
-  //
-  // Window Base Configs
-  //
-  u32 WindowWidth  = 1280;
-  u32 WindowHeight = 720;
+  NILE_assert(win32 != NULL);
 
-  //
-  // Window Class
-  //
-  // NOTE(AABI):
-  //   WNDCLASSEX (A/W) -> RegisterClassEx and GetClassInfoEx
-  //   maximum length of lpszClassName is 256
-  //   https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassa
-  //   https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-wndclassexa
-  //
-  // NOTE(AABI):
-  //   When you create your HWND, you need to make sure that it has the CS_OWNDC set for its style.
-  //   https://www.khronos.org/opengl/wiki/Creating_an_OpenGL_Context_(WGL)
-  //   https://learn.microsoft.com/en-us/windows/win32/api/_opengl/
-  //
-  WNDCLASSEXA window_class_exa   = {0};
-  window_class_exa.cbSize        = sizeof(WNDCLASSEX);
+  // @section(): start
+  HMODULE Instance = GetModuleHandleA(NULL);
+  assert(Instance != NULL);
+  // @section(): end
+
+  // @section(): start
+  WNDCLASSEXA window_class_exa = {0};
+  window_class_exa.cbSize      = sizeof(WNDCLASSEXA);
   window_class_exa.style         = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-  window_class_exa.lpfnWndProc   = Win32_DefaultWindowCallback;
+  window_class_exa.lpfnWndProc   = NILE_win32_defaultWindowCallback;
   window_class_exa.cbClsExtra    = 0;
   window_class_exa.cbWndExtra    = 0;
   window_class_exa.hInstance     = Instance;
@@ -798,163 +683,113 @@ WinMain(
   window_class_exa.lpszClassName = "MainWindowClass";
   window_class_exa.hIconSm       = 0;
 
-  //
-  // Create DIB seaction?
-  // DEP: Win32_ResizeDIBSection()
-  //
-  // NOTE(AABI) : DIB -> device independant bitmap
-  // TODO(AABI): WHY bmiheader -height vs +height
-  //
-  if(BitmapMemory)
+  ATOM registerclass = RegisterClassExA(&window_class_exa);
+  if(registerclass == 0)
   {
-    VirtualFree(BitmapMemory, 0, MEM_RELEASE);
-  }
-
-  BitmapWidth  = WindowWidth;
-  BitmapHeight = WindowHeight;
-
-  BitmapInfo.bmiHeader.biSize          = sizeof(BitmapInfo.bmiHeader);
-  BitmapInfo.bmiHeader.biWidth         = BitmapWidth;
-  BitmapInfo.bmiHeader.biHeight        = -BitmapHeight;
-  BitmapInfo.bmiHeader.biPlanes        = 1;
-  BitmapInfo.bmiHeader.biBitCount      = 32;
-  BitmapInfo.bmiHeader.biCompression   = BI_RGB;
-  BitmapInfo.bmiHeader.biSizeImage     = 0;
-  BitmapInfo.bmiHeader.biXPelsPerMeter = 0;
-  BitmapInfo.bmiHeader.biYPelsPerMeter = 0;
-  BitmapInfo.bmiHeader.biClrUsed       = 0;
-  BitmapInfo.bmiHeader.biClrImportant  = 0;
-
-  int BitmapMemorySize = (BitmapWidth * BitmapHeight) * BytePerPixel;
-  if(BitmapMemorySize == 0)
-  {
-    printf("Bitmap memory size SHOULD NOT be 0");
-    return (0);
-  }
-
-  BitmapMemory
-      = VirtualAlloc(0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
-
-  //
-  // Register Class
-  //
-  ATOM registerclass_resault = RegisterClassExA(&window_class_exa);
-  if(registerclass_resault == 0)
-  {
-    // TODO(AABI): you have the error -> handle or print it
+    // @todo: handle this
     DWORD registerclass_err = GetLastError();
     printf("registerclass failed, err: %lu ", registerclass_err);
-    return 0; // exit program if register fails
+    return 1;
   }
+  // @section(): end
 
+  // @section(): start
   //
-  // Create Window
-  //
-  LPCSTR Win32_MainWindowName       = "Main Window";
-  HWND   createwindowhandle_resault = CreateWindowExA(
+  LPCSTR Win32_MainWindowName = "Main Window";
+  int    window_x             = CW_USEDEFAULT;
+  int    window_y             = CW_USEDEFAULT;
+  int    window_width         = CW_USEDEFAULT; // CW_USEDEFAULT
+  int    window_height        = CW_USEDEFAULT; // CW_USEDEFAULT
+  HWND HWindow = CreateWindowExA(
       0, window_class_exa.lpszClassName, Win32_MainWindowName,
-      WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
-      CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, Instance, 0
+      WS_OVERLAPPEDWINDOW | WS_VISIBLE, window_x, window_y,
+      window_width, window_height, 0, 0, Instance, 0
   );
-  if(createwindowhandle_resault == 0)
+  if(HWindow == NULL)
   {
-    // TODO(AABI): you have the error -> handle or print it
+    // @todo: handle this
     DWORD createwindow_err = GetLastError();
     printf("createwindow failed, err: %lu ", createwindow_err);
-    return 0; // exit program if register fails
+    return 1;
   }
-  HDC DeviceContext = GetDC(createwindowhandle_resault);
+  NILE_assert(HWindow != NULL);
+  // @section(): end
 
-  // HWND   hWnd                 = CreateWindow(
-  //     MAKEINTATOM(wndclass), window_title, WS_OVERLAPPEDWINDOW,
-  //     window_location.x, window_location.y, window_size.cx,
-  //     window_size.cy, NULL, NULL, hInstance, NULL
-  // );
-
-  //
-  // ??????
-  //
-  if(Win32_G_DefaultWindowRunning == false)
+  // @section(): start
+  HDC HDeviceContext = GetDC(HWindow);
+  if(HDeviceContext == 0)
   {
-    // NOTE(AABI): this should have not happened
-    // TODO(AABI): Add Logging/Assert so we know this went wrong
-    Win32_G_DefaultWindowRunning = true;
-
-    printf("err: default running window is false before starting");
-    // return 0;
+    // @todo: handle this
+    puts("HDeviceContext failed");
+    return 1;
   }
+  NILE_assert(HDeviceContext != NULL);
 
-  //
-  //
-  //
-# if defined(NILE_GRFX_OPENGL)
-  // Set the pixel format for the device context:
   PIXELFORMATDESCRIPTOR pfd = {};
   pfd.nSize                 = sizeof(pfd);
-  pfd.nSize                 = sizeof(
-      PIXELFORMATDESCRIPTOR
-  ); // Set the size of the PFD to the size of the class
+  pfd.nSize                 = sizeof(PIXELFORMATDESCRIPTOR);
   pfd.dwFlags
-      = PFD_DOUBLEBUFFER | PFD_SUPPORT_OPENGL
-      | PFD_DRAW_TO_WINDOW; // Enable double buffering, opengl support and drawing to a window
-  pfd.iPixelType
-      = PFD_TYPE_RGBA; // Set our application to use RGBA pixels
-  pfd.cColorBits
-      = 32; // Give us 32 bits of color information (the higher, the more colors)
-  pfd.cDepthBits
-      = 32; // Give us 32 bits of depth information (the higher, the more depth levels)
-  pfd.iLayerType = PFD_MAIN_PLANE; // Set the layer of the PFD
-  int format     = ChoosePixelFormat(hdc, &pfd);
-  if(format == 0 || SetPixelFormat(hdc, format, &pfd) == FALSE)
+      = PFD_DOUBLEBUFFER | PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW;
+  pfd.iPixelType = PFD_TYPE_RGBA;
+  pfd.cColorBits = 32;
+  pfd.cDepthBits = 32;
+  pfd.iLayerType = PFD_MAIN_PLANE;
+  int format     = ChoosePixelFormat(HDeviceContext, &pfd);
+  if(format == 0
+     || SetPixelFormat(HDeviceContext, format, &pfd) == FALSE)
   {
-    ReleaseDC(hWnd, hdc);
-    DestroyWindow(hWnd);
+    puts("SetPixelFormat failed");
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
     MessageBox(
         NULL, _T("Failed to set a compatible pixel format!"),
-        window_title, MB_ICONERROR
+        Win32_MainWindowName, MB_ICONERROR
     );
     return -1;
   }
-  // Create and enable a temporary (helper) opengl context:
+// @section(): end
+
+// @section(): start
+# if defined(NILE_GLUE_WGL_MODERN)
   HGLRC temp_context = NULL;
-  if(NULL == (temp_context = wglCreateContext(hdc)))
+  if(NULL == (temp_context = wglCreateContext(HDeviceContext)))
   {
-    ReleaseDC(hWnd, hdc);
-    DestroyWindow(hWnd);
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
     MessageBox(
         NULL, _T("Failed to create the initial rendering context!"),
-        window_title, MB_ICONERROR
+        Win32_MainWindowName, MB_ICONERROR
     );
     return -1;
   }
-  wglMakeCurrent(hdc, temp_context);
+  wglMakeCurrent(HDeviceContext, temp_context);
 
   // Load WGL Extensions:
-  gladLoaderLoadWGL(hdc);
+  gladLoaderLoadWGL(HDeviceContext);
 
   // Set the desired OpenGL version:
-  int attributes [] = {
-      WGL_CONTEXT_MAJOR_VERSION_ARB,
-      3, // Set the MAJOR version of OpenGL to 3
-      WGL_CONTEXT_MINOR_VERSION_ARB,
-      2, // Set the MINOR version of OpenGL to 2
-      WGL_CONTEXT_FLAGS_ARB,
-      WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB, // Set our OpenGL context to be forward compatible
-      0
-  };
+  int attributes []
+      = {WGL_CONTEXT_MAJOR_VERSION_ARB,
+         3,
+         WGL_CONTEXT_MINOR_VERSION_ARB,
+         2,
+         WGL_CONTEXT_FLAGS_ARB,
+         WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+         0};
 
   // Create the final opengl context and get rid of the temporary one:
   HGLRC opengl_context = NULL;
   if(NULL
-     == (opengl_context
-         = wglCreateContextAttribsARB(hdc, NULL, attributes)))
+     == (opengl_context = wglCreateContextAttribsARB(
+             HDeviceContext, NULL, attributes
+         )))
   {
     wglDeleteContext(temp_context);
-    ReleaseDC(hWnd, hdc);
-    DestroyWindow(hWnd);
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
     MessageBox(
         NULL, _T("Failed to create the final rendering context!"),
-        window_title, MB_ICONERROR
+        Win32_MainWindowName, MB_ICONERROR
     );
     return -1;
   }
@@ -963,134 +798,80 @@ WinMain(
   ); // Remove the temporary context from being active
   wglDeleteContext(temp_context); // Delete the temporary OpenGL context
   wglMakeCurrent(
-      hdc, opengl_context
+      HDeviceContext, opengl_context
   ); // Make our OpenGL 3.2 context current
+# endif
+  // @section(): end
 
-  // Glad Loader!
+  // @section(): start
+  //  Glad Loader!
   if(!gladLoaderLoadGL())
   {
     wglMakeCurrent(NULL, NULL);
     wglDeleteContext(opengl_context);
-    ReleaseDC(hWnd, hdc);
-    DestroyWindow(hWnd);
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
     MessageBox(
-        NULL, _T("Glad Loader failed!"), window_title, MB_ICONERROR
+        NULL, _T("Glad Loader failed!"), Win32_MainWindowName,
+        MB_ICONERROR
     );
     return -1;
   }
-
   // Show & Update the main window:
-  ShowWindow(hWnd, nCmdShow);
-  UpdateWindow(hWnd);
-# endif // NILE_GRFX_OPENGL
+  // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow
+
+  ShowWindow(HWindow, SW_SHOWDEFAULT);
+  UpdateWindow(HWindow);
+  // @section(): end
+
+  // @section(): start
   //
-  //
-  // NOTE(AABIB):
-  //   https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessage
-  //
-  int XOffset = 0;
-  int YOffset = 0;
-  MSG Message;
-  while(Win32_G_DefaultWindowRunning)
-  {
-    //
-    // ??????
-    //
-    while(true) // WARN(AABI): infinite loop can happen
-    {
-      // NOTE(AABI): Funny enough peekmessage used to return -1 on err xD
-      // If a message is available, the return value is nonzero.
-      // If no messages are available, the return value is zero.
-      BOOL peekmessage_resault
-          = PeekMessageA(&Message, 0, 0, 0, PM_REMOVE);
+  NILE_assert(HDeviceContext != NULL);
+  NILE_assert(HWindow != NULL);
+  NILE_assert(opengl_context != NULL);
+  win32->hcontext    = HDeviceContext;
+  win32->hwindow     = HWindow;
+  win32->hgl_context = opengl_context;
+  // @section(): end
 
-      if(peekmessage_resault == 0)
-      {
-        // NOTE(AABI): exit this while loop if theres no msg
-        break;
-      }
+  // @section(): start
+  // @section(): end
 
-      // NOTE(AABI): make sure quit is handled
-      if(Message.message == WM_QUIT)
-      {
-        Win32_G_DefaultWindowRunning = false;
-      }
+  return 0;
+}
 
-      // TODO(AABI): handle error
-      TranslateMessage(&Message);
-      DispatchMessageA(&Message);
-    }
-
-    // @todo: add xinput controller handling loop here
-
-    //
-    // Render Weird Gradient
-    //
-    // NOTES(AABI):
-    //   PITCH: memory size of each row in bytes
-    int Width  = BitmapWidth;
-    int Height = BitmapHeight;
-    int Pitch  = Width * BytePerPixel;
-    u8 *Row    = (u8 *)BitmapMemory;
-    for(int Y = 0; Y < BitmapHeight; ++Y)
-    {
-      u32 *Pixel = (u32 *)Row;
-      for(int X = 0; X < BitmapWidth; ++X)
-      {
-        *Pixel = ((u32)(u8)(Y + YOffset) << (8 * 0))
-               + ((u32)(u8)(X + XOffset) << (8 * 1))
-               + ((u32)0 << (8 * 2)) + ((u32)0 << (8 * 3));
-        ++Pixel;
-      }
-      Row += Pitch;
-    }
-
-    //
-    // ????
-    //
-    RECT ClientRect;
-    GetClientRect(createwindowhandle_resault, &ClientRect);
-
-    int WindowWidth  = ClientRect.right - ClientRect.left;
-    int WindowHeight = ClientRect.bottom - ClientRect.top;
-
-    StretchDIBits(
-        DeviceContext, 0, 0, WindowWidth, WindowHeight, 0, 0,
-        BitmapWidth, BitmapHeight, BitmapMemory, &BitmapInfo,
-        DIB_RGB_COLORS, SRCCOPY
-    );
-
-    ReleaseDC(createwindowhandle_resault, DeviceContext);
-
-    //
-    // Offsets for Rendering Weird Gradient
-    //
-    ++XOffset;
-    ++YOffset;
-
-# if defined(NILE_GRFX_OPENGL)
-// glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
-// glClear(GL_COLOR_BUFFER_BIT);
-// SwapBuffers(hdc);
-# endif
-  }
+NILE_fn_internal int
+NILE_closeWindow_WIN32_WGL(NILE_Window_Win32 *win32)
+{
+  NILE_assert(win32 != NULL);
+  NILE_assert(win32->hgl_context != NULL);
+  NILE_assert(win32->hcontext != NULL);
+  NILE_assert(win32->hwindow != NULL);
 
   // Clean-up:
-# if defined(NILE_GRFX_OPENGL)
-  if(opengl_context)
-    wglDeleteContext(opengl_context);
-# endif
+  if(win32->hgl_context)
+    wglDeleteContext(win32->hgl_context);
+  if(win32->hcontext)
+    ReleaseDC(win32->hwindow, win32->hcontext);
+  if(win32->hwindow)
+    DestroyWindow(win32->hwindow);
 
-  ReleaseDC(createwindowhandle_resault, DeviceContext);
-  // if(hdc)
-  // ReleaseDC(hWnd, hdc);
-  // if(hWnd)
-  // DestroyWindow(hWnd);
-
-  return (0);
+  return 0;
 }
-#endif // NILE_PLATFORM_WINDOWS
 
+NILE_fn_internal int
+NILE_windowSwapBuffers_WIN32_WGL(NILE_Window_Win32 *win32)
+{
+  NILE_assert(win32 != NULL);
+  NILE_assert(win32->hgl_context != NULL);
+  NILE_assert(win32->hcontext != NULL);
+  NILE_assert(win32->hwindow != NULL);
+
+  SwapBuffers(win32->hcontext);
+  return 0;
+}
+
+#endif // NILE_PLATFORM_WINDOWS
 //
 // Windows main
 // ----------------------------------------------------------------------------
@@ -1138,6 +919,18 @@ NILE_createWindow(
   int createWindow_result
       = NILE_createWindow_X11_GLX((NILE_WindowX11 *)window->window_x11);
 #endif
+#if defined(NILE_WINDOW_WIN32)
+  window->window_win32
+      = (NILE_Window_Win32 *)malloc(sizeof(NILE_Window_Win32));
+  NILE_assert(window->window_win32 != NULL);
+
+  int createWindow_result = NILE_createWindow_WIN32_WGL(
+      (NILE_Window_Win32 *)window->window_win32
+  );
+
+  free((NILE_Window_Win32 *)window->window_win32);
+#endif
+  assert(createWindow_result == 0);
 
   return window;
 }
@@ -1153,6 +946,13 @@ NILE_closeWindow(NILE_Window *window)
 
   free((NILE_WindowX11 *)window->window_x11);
 #endif
+#if defined(NILE_WINDOW_WIN32)
+  NILE_assert(window->window_win32 != NULL);
+  int closeWindow_result
+      = NILE_closeWindow_WIN32_WGL(window->window_win32);
+
+  free((NILE_Window_Win32 *)window->window_win32);
+#endif
 
   free(window);
   return 0;
@@ -1165,6 +965,10 @@ NILE_windowSwapBuffers(NILE_Window *window)
 #if defined(NILE_WINDOW_X11)
   NILE_assert(window->window_x11 != NULL);
   int result = NILE_windowSwapBuffers_X11_GLX(window->window_x11);
+#endif
+#if defined(NILE_WINDOW_WIN32)
+  NILE_assert(window->window_win32 != NULL);
+  int result = NILE_windowSwapBuffers_WIN32_WGL(window->window_win32);
 #endif
 
   return 0;
