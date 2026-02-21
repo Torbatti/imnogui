@@ -84,13 +84,6 @@
  *
  */
 
-#define NILE_PLATFORM_WINDOWS
-#define NILE_WINDOW_WIN32
-#define NILE_GLUE_WGL
-#define NILE_GLUE_WGL_MODERN
-#define NILE_GRFX_OPENGL
-#define NILE_GRFX_OPENGL_V33
-
 // https://semver.org/
 #define NILE_VERSION_MAJOR 0
 #define NILE_VERSION_MINOR 1
@@ -177,17 +170,22 @@
 
 // @note: `GLAD_GL_IMPLEMENTATION` Enables Glad Gl
 # define GLAD_GL_IMPLEMENTATION
+
 # if defined(NILE_GRFX_OPENGL_V10)
 #  include <glad/gl10core.h>
+const int gl_arb_version [3] = {1, 0, 0};
 # endif
 # if defined(NILE_GRFX_OPENGL_V11)
 #  include <glad/gl11core.h>
+const int gl_arb_version [3] = {1, 1, 0};
 # endif
 # if defined(NILE_GRFX_OPENGL_V21)
 #  include <glad/gl21core.h>
+const int gl_arb_version [3] = {2, 1, 0};
 # endif
 # if defined(NILE_GRFX_OPENGL_V33)
 #  include <glad/gl33core.h>
+const int gl_arb_version [3] = {3, 3, 0};
 # endif
 
 // @brief(aabib): on linux if opengl(gapi) and x11(wapi) is selected , defaults to glx
@@ -648,7 +646,7 @@ typedef struct NILE_Window_Win32 {
 //   https://learn.microsoft.com/en-us/windows/win32/winmsg/about-messages-and-message-queues#system-defined-messages
 //
 LRESULT CALLBACK
-NILE_win32_defaultWindowCallback(
+NILE_win32_defaultCallback(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 )
 {
@@ -718,178 +716,282 @@ NILE_win32_defaultWindowCallback(
 // NOTE(AABI): Funny enough peekmessage used to return -1 on err xD
 // If a message is available, the return value is nonzero.
 // If no messages are available, the return value is zero.
+//
+//
+// @note:
+// on wgl modern version we need to make a temp wgl gl context and
+// replace it with our new context from modern wgl extension
+//
+# if defined(NILE_GLUE_WGL)
 NILE_fn_internal int
 NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
 {
-  NILE_assert(win32 != NULL);
+  int result = NILE_RESULT_SUCCESS;
 
-  // @section(): start
-  HMODULE Instance = GetModuleHandleA(NULL);
-  assert(Instance != NULL);
-  // @section(): end
+  // @brief: win32 pointer should be an empty initilized win32 struct pointer
+  if(win32 == NULL)
+  {
+    // @todo: better error handling with logging
+    puts("NILE_Window_Win32 *win32 is NULL");
 
-  // @section(): start
-  WNDCLASSEXA window_class_exa   = {0};
-  window_class_exa.cbSize        = sizeof(WNDCLASSEXA);
-  window_class_exa.style         = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-  window_class_exa.lpfnWndProc   = NILE_win32_defaultWindowCallback;
-  window_class_exa.cbClsExtra    = 0;
-  window_class_exa.cbWndExtra    = 0;
-  window_class_exa.hInstance     = Instance;
-  window_class_exa.hIcon         = 0;
-  window_class_exa.hCursor       = 0; // LoadCursor(NULL, IDC_ARROW)
-  window_class_exa.hbrBackground = 0; // (HBRUSH) (COLOR_WINDOW + 1);
-  window_class_exa.lpszMenuName  = 0;
-  window_class_exa.lpszClassName = "MainWindowClass";
-  window_class_exa.hIconSm       = 0;
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
 
-  ATOM registerclass = RegisterClassExA(&window_class_exa);
+  // @brief: if main is used instead of WinMain as the main entry point
+  //         have to get hInstance from GetModuleHandle()
+  HMODULE HInstance = GetModuleHandleA(NULL);
+  if(HInstance == NULL)
+  {
+    // @todo: better error handling with logging
+    DWORD GetModuleHandleA_err = GetLastError();
+    puts("GetModuleHandleA failed");
+
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+
+  // @brief:
+  LPCSTR      win32_mainWindowName = "Main Window";
+  WNDCLASSEXA window_classexa      = {0};
+  window_classexa.cbSize           = sizeof(WNDCLASSEXA);
+  window_classexa.style            = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
+  window_classexa.lpfnWndProc      = NILE_win32_defaultCallback;
+  window_classexa.cbClsExtra       = 0;
+  window_classexa.cbWndExtra       = 0;
+  window_classexa.hInstance        = HInstance;
+  window_classexa.hIcon            = 0;
+  window_classexa.hCursor          = 0; // LoadCursor(NULL, IDC_ARROW)
+  window_classexa.hbrBackground    = 0; // (HBRUSH) (COLOR_WINDOW + 1);
+  window_classexa.lpszMenuName     = 0;
+  window_classexa.lpszClassName    = "MainWindowClass";
+  window_classexa.hIconSm          = 0;
+
+  // @brief:
+  ATOM registerclass = RegisterClassExA(&window_classexa);
   if(registerclass == 0)
   {
-    // @todo: handle this
-    DWORD registerclass_err = GetLastError();
-    printf("registerclass failed, err: %lu ", registerclass_err);
-    return 1;
-  }
-  // @section(): end
+    // @todo: better error handling with logging
+    DWORD RegisterClassExA_err = GetLastError();
+    puts("RegisterClassExA failed");
 
-  // @section(): start
-  //
-  LPCSTR Win32_MainWindowName = "Main Window";
-  int    window_x             = CW_USEDEFAULT;
-  int    window_y             = CW_USEDEFAULT;
-  int    window_width         = CW_USEDEFAULT; // CW_USEDEFAULT
-  int    window_height        = CW_USEDEFAULT; // CW_USEDEFAULT
-  HWND   HWindow              = CreateWindowExA(
-      0, window_class_exa.lpszClassName, Win32_MainWindowName,
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+
+  // @brief:
+  int  window_x      = CW_USEDEFAULT;
+  int  window_y      = CW_USEDEFAULT;
+  int  window_width  = CW_USEDEFAULT;
+  int  window_height = CW_USEDEFAULT;
+  HWND HWindow       = CreateWindowExA(
+      0, window_classexa.lpszClassName, win32_mainWindowName,
       WS_OVERLAPPEDWINDOW | WS_VISIBLE, window_x, window_y,
-      window_width, window_height, 0, 0, Instance, 0
+      window_width, window_height, 0, 0, HInstance, 0
   );
   if(HWindow == NULL)
   {
-    // @todo: handle this
-    DWORD createwindow_err = GetLastError();
-    printf("createwindow failed, err: %lu ", createwindow_err);
-    return 1;
-  }
-  NILE_assert(HWindow != NULL);
-  // @section(): end
+    // @todo: better error handling with logging
+    DWORD CreateWindowExA_err = GetLastError();
+    puts("CreateWindowExA failed");
 
-  // @section(): start
+    // @brief: no cleanup needed
+
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+
+  // @brief:
   HDC HDeviceContext = GetDC(HWindow);
-  if(HDeviceContext == 0)
+  if(HDeviceContext == NULL)
   {
-    // @todo: handle this
-    puts("HDeviceContext failed");
-    return 1;
-  }
-  NILE_assert(HDeviceContext != NULL);
+    // @todo: better error handling with logging
+    DWORD GetDC_err = GetLastError();
+    puts("GetDC failed");
 
-  PIXELFORMATDESCRIPTOR pfd = {};
-  pfd.nSize                 = sizeof(pfd);
-  pfd.nSize                 = sizeof(PIXELFORMATDESCRIPTOR);
-  pfd.dwFlags
+    // @brief: cleanup
+    DestroyWindow(HWindow);
+
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+
+  // @brief:
+  PIXELFORMATDESCRIPTOR pixelformatd = {};
+  pixelformatd.nSize                 = sizeof(pixelformatd);
+  pixelformatd.nSize                 = sizeof(PIXELFORMATDESCRIPTOR);
+  pixelformatd.dwFlags
       = PFD_DOUBLEBUFFER | PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW;
-  pfd.iPixelType = PFD_TYPE_RGBA;
-  pfd.cColorBits = 32;
-  pfd.cDepthBits = 32;
-  pfd.iLayerType = PFD_MAIN_PLANE;
-  int format     = ChoosePixelFormat(HDeviceContext, &pfd);
-  if(format == 0
-     || SetPixelFormat(HDeviceContext, format, &pfd) == FALSE)
+  pixelformatd.iPixelType = PFD_TYPE_RGBA;
+  pixelformatd.cColorBits = 32;
+  pixelformatd.cDepthBits = 32;
+  pixelformatd.iLayerType = PFD_MAIN_PLANE;
+
+  int format = ChoosePixelFormat(HDeviceContext, &pixelformatd);
+  if(format == 0)
   {
+    // @todo: better error handling with logging
+    DWORD ChoosePixelFormat_err = GetLastError();
+    puts("ChoosePixelFormat failed");
+
+    // @brief: cleanup
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
+
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+
+  int setpixelformat_result
+      = SetPixelFormat(HDeviceContext, format, &pixelformatd);
+  if(setpixelformat_result == FALSE)
+  {
+    // @todo: better error handling with logging
+    DWORD SetPixelFormat_err = GetLastError();
     puts("SetPixelFormat failed");
+
+    // @brief: cleanup
     ReleaseDC(HWindow, HDeviceContext);
     DestroyWindow(HWindow);
-    MessageBox(
-        NULL, _T("Failed to set a compatible pixel format!"),
-        Win32_MainWindowName, MB_ICONERROR
-    );
-    return -1;
-  }
-// @section(): end
 
-// @section(): start
-# if defined(NILE_GLUE_WGL_MODERN)
-  HGLRC temp_context = NULL;
-  if(NULL == (temp_context = wglCreateContext(HDeviceContext)))
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+
+#  if defined(NILE_GLUE_WGL_BASE)
+  // @brief: create wgl context
+  HGLRC wgl_gl_context = wglCreateContext(HDeviceContext);
+  if(wgl_gl_context == NULL)
   {
+    // @todo: better error handling with logging
+    DWORD wglCreateContext_err = GetLastError();
+    puts("wglCreateContext failed");
+
+    // @brief: cleanup
     ReleaseDC(HWindow, HDeviceContext);
     DestroyWindow(HWindow);
-    MessageBox(
-        NULL, _T("Failed to create the initial rendering context!"),
-        Win32_MainWindowName, MB_ICONERROR
-    );
-    return -1;
+
+    result = NILE_RESULT_FAIL;
+    return result;
   }
-  wglMakeCurrent(HDeviceContext, temp_context);
+  // @todo: should i check if `wglMakeCurrent` failed or not?
+  wglMakeCurrent(HDeviceContext, wgl_gl_context);
 
-  // Load WGL Extensions:
-  gladLoaderLoadWGL(HDeviceContext);
+  // @breif: load wgl
+  int gladloaderloadwgl_result = gladLoaderLoadWGL(HDeviceContext);
+  if(gladloaderloadwgl_result == FALSE)
+  {
+    // @todo: better error handling with logging
+    DWORD gladLoaderLoadWGL_err = GetLastError();
+    puts("gladLoaderLoadWGL failed");
 
-  // Set the desired OpenGL version:
-  int attributes []
+    // @brief: cleanup
+    wglMakeCurrent(NULL, NULL);
+    wglDeleteContext(wgl_gl_context);
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
+
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+#  endif
+#  if defined(NILE_GLUE_WGL_MODERN)
+  // @brief: create temp wgl context
+  HGLRC wgl_gl_temp_context = wglCreateContext(HDeviceContext);
+  if(wgl_gl_temp_context == NULL)
+  {
+    // @todo: better error handling with logging
+    DWORD wglCreateContext_err = GetLastError();
+    puts("wglCreateContext failed");
+
+    // @brief: cleanup
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
+
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+  // @todo: should i check if `wglMakeCurrent` failed or not?
+  wglMakeCurrent(HDeviceContext, wgl_gl_temp_context);
+
+  // @breif: load wgl
+  int gladloaderloadwgl_result = gladLoaderLoadWGL(HDeviceContext);
+  if(gladloaderloadwgl_result == FALSE)
+  {
+    // @todo: better error handling with logging
+    DWORD gladLoaderLoadWGL_err = GetLastError();
+    puts("gladLoaderLoadWGL failed");
+
+    // @brief: cleanup
+    wglMakeCurrent(NULL, NULL);
+    wglDeleteContext(wgl_gl_temp_context);
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
+
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+
+  // @brief: create modern wgl context and replace temp context
+  int wgl_context_attributes []
       = {WGL_CONTEXT_MAJOR_VERSION_ARB,
          3,
          WGL_CONTEXT_MINOR_VERSION_ARB,
-         2,
+         3,
          WGL_CONTEXT_FLAGS_ARB,
          WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
          0};
-
-  // Create the final opengl context and get rid of the temporary one:
-  HGLRC opengl_context = NULL;
-  if(NULL
-     == (opengl_context = wglCreateContextAttribsARB(
-             HDeviceContext, NULL, attributes
-         )))
+  HGLRC wgl_gl_context = wglCreateContextAttribsARB(
+      HDeviceContext, NULL, wgl_context_attributes
+  );
+  if(wgl_gl_context == NULL)
   {
-    wglDeleteContext(temp_context);
-    ReleaseDC(HWindow, HDeviceContext);
-    DestroyWindow(HWindow);
-    MessageBox(
-        NULL, _T("Failed to create the final rendering context!"),
-        Win32_MainWindowName, MB_ICONERROR
-    );
-    return -1;
-  }
-  wglMakeCurrent(
-      NULL, NULL
-  ); // Remove the temporary context from being active
-  wglDeleteContext(temp_context); // Delete the temporary OpenGL context
-  wglMakeCurrent(
-      HDeviceContext, opengl_context
-  ); // Make our OpenGL 3.2 context current
-# endif
-  // @section(): end
+    // @todo: better error handling with logging
+    DWORD wglCreateContextAttribsARB_err = GetLastError();
+    puts("wglCreateContextAttribsARB failed");
 
-  // @section(): start
-  //  Glad Loader!
-  if(!gladLoaderLoadGL())
-  {
+    // @brief: cleanup
     wglMakeCurrent(NULL, NULL);
-    wglDeleteContext(opengl_context);
+    wglDeleteContext(wgl_gl_temp_context);
     ReleaseDC(HWindow, HDeviceContext);
     DestroyWindow(HWindow);
-    MessageBox(
-        NULL, _T("Glad Loader failed!"), Win32_MainWindowName,
-        MB_ICONERROR
-    );
-    return -1;
+
+    result = NILE_RESULT_FAIL;
+    return result;
   }
-  // Show & Update the main window:
+
+  // @todo: should i check if `wglMakeCurrent`,`wglDeleteContext`and `wglMakeCurrent` failed or not?
+  wglMakeCurrent(NULL, NULL);
+  wglDeleteContext(wgl_gl_temp_context);
+  wglMakeCurrent(HDeviceContext, wgl_gl_context);
+#  endif
+  // @breif: load gl
+  int gladloaderloadgl_result = gladLoaderLoadGL();
+  if(gladloaderloadgl_result == FALSE)
+  {
+    // @todo: better error handling with logging
+    DWORD wglMakeCurrent_err = GetLastError();
+    puts("wglMakeCurrent failed");
+
+    wglMakeCurrent(NULL, NULL);
+    wglDeleteContext(wgl_gl_context);
+    ReleaseDC(HWindow, HDeviceContext);
+    DestroyWindow(HWindow);
+
+    result = NILE_RESULT_FAIL;
+    return result;
+  }
+
+  // @todo: should i check if `ShowWindow`and`UpdateWindow` failed or not?
   ShowWindow(HWindow, SW_SHOWDEFAULT);
   UpdateWindow(HWindow);
-  // @section(): end
 
-  // @section(): start
-  //
   NILE_assert(HDeviceContext != NULL);
   NILE_assert(HWindow != NULL);
-  NILE_assert(opengl_context != NULL);
+  NILE_assert(wgl_gl_context != NULL);
   win32->hcontext    = HDeviceContext;
   win32->hwindow     = HWindow;
-  win32->hgl_context = opengl_context;
+  win32->hgl_context = wgl_gl_context;
   // @section(): end
 
   // @section(): start
@@ -928,8 +1030,8 @@ NILE_windowSwapBuffers_WIN32_WGL(NILE_Window_Win32 *win32)
   SwapBuffers(win32->hcontext);
   return 0;
 }
-
-#endif // NILE_PLATFORM_WINDOWS
+# endif // NILE_GLUE_WGL
+#endif  // NILE_PLATFORM_WINDOWS
 //
 // Windows main
 // ----------------------------------------------------------------------------
@@ -970,14 +1072,15 @@ NILE_createWindow(
 {
   NILE_Window *window = (NILE_Window *)malloc(sizeof(NILE_Window));
 
-#if defined(NILE_WINDOW_X11)
+#if defined(NILE_WINDOW_X11) && defined(NILE_GLUE_GLX)
   window->window_x11 = (NILE_WindowX11 *)malloc(sizeof(NILE_WindowX11));
   NILE_assert(window->window_x11 != NULL);
 
   int createWindow_result
       = NILE_createWindow_X11_GLX((NILE_WindowX11 *)window->window_x11);
+  assert(createWindow_result == 0);
 #endif
-#if defined(NILE_WINDOW_WIN32)
+#if defined(NILE_WINDOW_WIN32) && defined(NILE_GLUE_WGL)
   window->window_win32
       = (NILE_Window_Win32 *)malloc(sizeof(NILE_Window_Win32));
   NILE_assert(window->window_win32 != NULL);
@@ -987,8 +1090,8 @@ NILE_createWindow(
   );
 
   free((NILE_Window_Win32 *)window->window_win32);
-#endif
   assert(createWindow_result == 0);
+#endif
 
   return window;
 }
@@ -997,14 +1100,14 @@ NILE_fn_internal int
 NILE_closeWindow(NILE_Window *window)
 {
 
-#if defined(NILE_WINDOW_X11)
+#if defined(NILE_WINDOW_X11) && defined(NILE_GLUE_GLX)
   NILE_assert(window->window_x11 != NULL);
   int closeWindow_result
       = NILE_closeWindow_X11_GLX((NILE_WindowX11 *)window->window_x11);
 
   free((NILE_WindowX11 *)window->window_x11);
 #endif
-#if defined(NILE_WINDOW_WIN32)
+#if defined(NILE_WINDOW_WIN32) && defined(NILE_GLUE_WGL)
   NILE_assert(window->window_win32 != NULL);
   int closeWindow_result
       = NILE_closeWindow_WIN32_WGL(window->window_win32);
@@ -1020,11 +1123,11 @@ NILE_fn_internal int
 NILE_windowSwapBuffers(NILE_Window *window)
 {
 
-#if defined(NILE_WINDOW_X11)
+#if defined(NILE_WINDOW_X11) && defined(NILE_GLUE_GLX)
   NILE_assert(window->window_x11 != NULL);
   int result = NILE_windowSwapBuffers_X11_GLX(window->window_x11);
 #endif
-#if defined(NILE_WINDOW_WIN32)
+#if defined(NILE_WINDOW_WIN32) && defined(NILE_GLUE_WGL)
   NILE_assert(window->window_win32 != NULL);
   int result = NILE_windowSwapBuffers_WIN32_WGL(window->window_win32);
 #endif
