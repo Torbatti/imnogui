@@ -95,7 +95,6 @@ persist_global AppWindow app_window = (AppWindow){
 int
 main()
 {
-
   NILE_Window *window = NILE_createWindow(
       app_window.name, app_window.x, app_window.y, app_window.width,
       app_window.height, (u64)0
@@ -103,9 +102,9 @@ main()
   assert(window != NULL);
 
   int quit = false;
+  MSG Message;
   while(!quit)
   {
-
 #if defined(NILE_WINDOW_X11)
     while(XPending(((NILE_WindowX11 *)window->window_x11)->display))
     {
@@ -127,8 +126,37 @@ main()
 #if defined(NILE_PLATFORM_LINUX)
     usleep(1000 * 10);
 #endif
+
+// @brief: win32 loop stops if messages are not handled
 #if defined(NILE_PLATFORM_WINDOWS)
-    Sleep(1000 * 10);
+    // @brief: peek for messages
+    int peek_message = 1;
+    while(peek_message == 1)
+    {
+      BOOL peek_message_resault
+          = PeekMessageA(&Message, 0, 0, 0, PM_REMOVE);
+
+      // @brief: check if any message is available, 0 means no message
+      if(peek_message_resault == 0)
+      {
+        peek_message = 0;
+      }
+
+      // @brief: handle messages
+      switch(Message.message)
+      {
+        case WM_QUIT :
+          {
+            quit = 1;
+          }
+          break;
+      }
+
+      // @todo: handle error
+      // @todo: what `TranslateMessage()` and `DispatchMessageA()` are supposed to do
+      TranslateMessage(&Message);
+      DispatchMessageA(&Message);
+    }
 #endif
   }
 
