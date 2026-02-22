@@ -84,6 +84,13 @@
  *
  */
 
+#define NILE_PLATFORM_WINDOWS
+#define NILE_WINDOW_WIN32
+#define NILE_GLUE_WGL
+#define NILE_GLUE_WGL_MODERN
+#define NILE_GRFX_OPENGL
+#define NILE_GRFX_OPENGL_V33
+
 // https://semver.org/
 #define NILE_VERSION_MAJOR 0
 #define NILE_VERSION_MINOR 1
@@ -157,6 +164,7 @@
 // @note(aabib): defining WIN32_LEAN_AND_MEAN will speed build process by excluding less used apis
 # define WIN32_LEAN_AND_MEAN
 # include <windows.h>
+# include <windowsx.h>
 # include <tchar.h>
 #endif
 //
@@ -650,17 +658,115 @@ NILE_win32_defaultCallback(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 )
 {
-  LRESULT Resault = 0;
+  LRESULT resault = NILE_RESULT_SUCCESS;
 
   switch(uMsg)
   {
+    // Keyboard
+    case WM_ACTIVATE : //
+      break;
+    case WM_APPCOMMAND : //
+      break;
+    case WM_DEADCHAR : //
+      break;
+    case WM_HOTKEY : //
+      break;
+    case WM_KILLFOCUS : //
+      break;
+    case WM_SETFOCUS : //
+      break;
+    case WM_SYSDEADCHAR : //
+      break;
+    case WM_UNICHAR : //
+      break;
+
+    case WM_SYSKEYDOWN : //
+      break;
+    case WM_SYSCHAR : //
+      break;
+    case WM_SYSKEYUP : //
+      break;
+    case WM_KEYDOWN : //
+      break;
+    case WM_KEYUP : //
+      break;
+    case WM_CHAR : //
+      break;
+
+    // Mouse
+    case WM_LBUTTONDOWN : //
+      break;
+    case WM_LBUTTONUP : //
+      break;
+    case WM_MBUTTONDOWN : //
+      break;
+    case WM_MBUTTONUP : //
+      break;
+    case WM_RBUTTONDOWN : //
+      break;
+    case WM_RBUTTONUP : //
+      break;
+    case WM_XBUTTONDOWN : //
+      break;
+    case WM_XBUTTONUP : //
+      break;
+
+    // Clipboard
+    case WM_CLEAR : //
+      break;
+    case WM_COPY : //
+      break;
+    case WM_CUT : //
+      break;
+    case WM_PASTE : //
+      break;
+
+    //
+    // Window
+    //
+    case WM_SHOWWINDOW : // @brief: window is hidden or shown
+      break;
+    case WM_SIZE : // @brief: window is resized
+      break;
+    case WM_SIZING : // @brief: window is being resized
+      break;
+    case WM_MOVE : // @brief: window is moved
+      break;
+    case WM_MOVING : // @brief: window is being moved
+      break;
+
     case WM_QUIT :
     case WM_CLOSE   : DestroyWindow(hWnd); break;
     case WM_DESTROY : PostQuitMessage(0); break;
     default         : return DefWindowProc(hWnd, uMsg, wParam, lParam);
   }
 
-  return (Resault);
+  return (resault);
+}
+
+int
+win32_checkMouseFlags(UINT uMsg)
+{
+  switch(uMsg)
+  {
+    case MK_CONTROL  : break;
+    case MK_LBUTTON  : break;
+    case MK_MBUTTON  : break;
+    case MK_RBUTTON  : break;
+    case MK_SHIFT    : break;
+    case MK_XBUTTON1 : break;
+    case MK_XBUTTON2 : break;
+  }
+
+  return NILE_RESULT_SUCCESS;
+}
+int
+win32_checkMousePosition(LPARAM lParam)
+{
+  int xPos = GET_X_LPARAM(lParam);
+  int yPos = GET_Y_LPARAM(lParam);
+
+  return NILE_RESULT_SUCCESS;
 }
 
 // GetStartupInfoW  doesnt work correctly
@@ -722,6 +828,10 @@ NILE_win32_defaultCallback(
 // on wgl modern version we need to make a temp wgl gl context and
 // replace it with our new context from modern wgl extension
 //
+//
+// @todo: icon create/load/get abstractions
+// @todo: input [mouse,keyboard,controller] abstractions
+//
 # if defined(NILE_GLUE_WGL)
 NILE_fn_internal int
 NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
@@ -755,17 +865,21 @@ NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
   LPCSTR      win32_mainWindowName = "Main Window";
   WNDCLASSEXA window_classexa      = {0};
   window_classexa.cbSize           = sizeof(WNDCLASSEXA);
-  window_classexa.style            = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-  window_classexa.lpfnWndProc      = NILE_win32_defaultCallback;
-  window_classexa.cbClsExtra       = 0;
-  window_classexa.cbWndExtra       = 0;
-  window_classexa.hInstance        = HInstance;
-  window_classexa.hIcon            = 0;
-  window_classexa.hCursor          = 0; // LoadCursor(NULL, IDC_ARROW)
-  window_classexa.hbrBackground    = 0; // (HBRUSH) (COLOR_WINDOW + 1);
-  window_classexa.lpszMenuName     = 0;
-  window_classexa.lpszClassName    = "MainWindowClass";
-  window_classexa.hIconSm          = 0;
+  window_classexa.style
+      = CS_HREDRAW // @brief: redraw entire window if client width changes on movment or resize
+      | CS_VREDRAW // @brief: redraw entire window if client height changes on movment or resize
+      | CS_DBLCLKS // @brief: enable sending double-click messages to the window procedure.
+      | CS_OWNDC; // @brief: unique device context for each window in the class.
+  window_classexa.lpfnWndProc   = NILE_win32_defaultCallback;
+  window_classexa.cbClsExtra    = 0;
+  window_classexa.cbWndExtra    = 0;
+  window_classexa.hInstance     = HInstance;
+  window_classexa.hIcon         = NULL;
+  window_classexa.hCursor       = NULL;
+  window_classexa.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+  window_classexa.lpszMenuName  = NULL;
+  window_classexa.lpszClassName = "MainWindowClass";
+  window_classexa.hIconSm       = 0;
 
   // @brief:
   ATOM registerclass = RegisterClassExA(&window_classexa);
@@ -986,16 +1100,13 @@ NILE_createWindow_WIN32_WGL(NILE_Window_Win32 *win32)
   ShowWindow(HWindow, SW_SHOWDEFAULT);
   UpdateWindow(HWindow);
 
+  // @brief: passing handles to internal win32 pointer
   NILE_assert(HDeviceContext != NULL);
   NILE_assert(HWindow != NULL);
   NILE_assert(wgl_gl_context != NULL);
   win32->hcontext    = HDeviceContext;
   win32->hwindow     = HWindow;
   win32->hgl_context = wgl_gl_context;
-  // @section(): end
-
-  // @section(): start
-  // @section(): end
 
   return 0;
 }
